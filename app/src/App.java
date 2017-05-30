@@ -1,4 +1,5 @@
 import app.mysql.MySQLModel;
+import app.profile.Profile;
 import app.profile.ProfileService;
 
 /**
@@ -13,7 +14,17 @@ public class App {
 
         MySQLModel model = new MySQLModel();
         ProfileService profileService = new ProfileService(model);
+
+        System.out.println(System.currentTimeMillis());
         System.out.println(profileService.getProfile(1).toString());
-//        Profile profile = new Profile();
+        System.out.println(System.currentTimeMillis());
+        System.out.println(profileService.getProfile(1).toString());
+        System.out.println(System.currentTimeMillis());
+        System.out.println(profileService.getProfile(2).toString());
+        System.out.println(System.currentTimeMillis());
+        System.out.println(profileService.getProfile(2).toString());
+        System.out.println(System.currentTimeMillis());
+//        Profile profile = new Profile().set;
+//        profileService.createProfile("Имя", "Фамилия");
     }
 }

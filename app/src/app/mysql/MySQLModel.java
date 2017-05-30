@@ -1,7 +1,10 @@
 package app.mysql;
 
 import com.mysql.jdbc.Driver;
+import com.sun.deploy.util.StringUtils;
+
 import java.sql.*;
+import java.util.Arrays;
 
 
 public class MySQLModel {
@@ -58,6 +61,12 @@ public class MySQLModel {
 //            try { stmt.close(); } catch(SQLException se) { /*can't do anything */ }
 //            try { rs.close(); } catch(SQLException se) { /*can't do anything */ }
 //        }
+    }
+
+    public String createFormatIn(int len){
+        String[] symbols = new String[len];
+        Arrays.fill(symbols, "?");
+        return "(" + String.join(",", symbols) + ")";
     }
 
     public static interface QueryBody{
