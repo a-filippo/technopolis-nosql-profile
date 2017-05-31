@@ -1,198 +1,265 @@
 package app.cache;
+import org.w3c.dom.NodeList;
 
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedHashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
-public class LFUCache<Key, Value> implements Map<Key, Value> {
+public class LFUCache<K, V> {
+    /* Key value store for LFU cache
+       The key is normal key and value is a reference to
+       a node in frequency list. This node will point to
+       its parent which is head of linkedlist for particular
+       frequency */
+    HashMap<K, LFUCacheEntry<K, V>> kvStore;
 
-    private final Map<Key, CacheNode<Key, Value>> cache;
-    private final LinkedHashSet[] frequencyList;
-    private int lowestFrequency;
-    private int maxFrequency;
-    //
-    private final int maxCacheSize;
-    private final float evictionFactor;
+    /* A Doubly linked list of frequency nodes */
+    NodeList freqList;
 
-    public LFUCache(int maxCacheSize, float evictionFactor) {
-        if (evictionFactor <= 0 || evictionFactor >= 1) {
-            throw new IllegalArgumentException("Eviction factor must be greater than 0 and lesser than or equal to 1");
-        }
-        this.cache = new HashMap<Key, CacheNode<Key, Value>>(maxCacheSize);
-        this.frequencyList = new LinkedHashSet[maxCacheSize];
-        this.lowestFrequency = 0;
-        this.maxFrequency = maxCacheSize - 1;
-        this.maxCacheSize = maxCacheSize;
-        this.evictionFactor = evictionFactor;
-        initFrequencyList();
+    /* HashMap for storing frequencyNode entries */
+    HashMap<Integer, FrequencyNode> frequencyMap;
+
+    /* Capacity of cache */
+    int capacity;
+
+    /* current size of Cache */
+    int size;
+
+    public String toString(){
+        return kvStore.toString();
     }
 
-    public Value put(Key k, Value v) {
-        Value oldValue = null;
-        CacheNode<Key, Value> currentNode = cache.get(k);
-        if (currentNode == null) {
-            if (cache.size() == maxCacheSize) {
-                doEviction();
-            }
-            LinkedHashSet<CacheNode<Key, Value>> nodes = frequencyList[0];
-            currentNode = new CacheNode(k, v, 0);
-            nodes.add(currentNode);
-            cache.put(k, currentNode);
-            lowestFrequency = 0;
-        } else {
-            oldValue = currentNode.v;
-            currentNode.v = v;
+    public LFUCache(int capacity) {
+        this.capacity = capacity;
+        size = 0;
+        kvStore = new HashMap<K, LFUCacheEntry<K, V>>();
+        freqList = new NodeList();
+        frequencyMap = new HashMap<Integer, FrequencyNode>();
+    }
+
+    public void delete (K key){
+        if (!kvStore.containsKey(key))
+            return;
+
+        LFUCacheEntry<K, V> entry = kvStore.get(key);
+        kvStore.remove(key);
+        entry.frequencyNode.lfuCacheEntryList.remove(entry);
+        if (entry.frequencyNode.lfuCacheEntryList.length <= 0) {
+            frequencyMap.remove(entry.frequencyNode.frequency);
+            freqList.remove(entry.frequencyNode);
         }
-        return oldValue;
+        size--;
+    }
+
+    public void delete(LFUCacheEntry<K, V> entry) {
+        if (!kvStore.containsKey(entry.key))
+            return;
+
+        kvStore.remove(entry.key);
+        entry.frequencyNode.lfuCacheEntryList.remove(entry);
+        if (entry.frequencyNode.lfuCacheEntryList.length <= 0) {
+            frequencyMap.remove(entry.frequencyNode.frequency);
+            freqList.remove(entry.frequencyNode);
+        }
+        size--;
     }
 
 
-    public void putAll(Map<? extends Key, ? extends Value> map) {
-        for (Map.Entry<? extends Key, ? extends Value> me : map.entrySet()) {
-            put(me.getKey(), me.getValue());
-        }
-    }
-
-    public Value get(Object k) {
-        CacheNode<Key, Value> currentNode = cache.get(k);
-        if (currentNode != null) {
-            int currentFrequency = currentNode.frequency;
-            if (currentFrequency < maxFrequency) {
-                int nextFrequency = currentFrequency + 1;
-                LinkedHashSet<CacheNode<Key, Value>> currentNodes = frequencyList[currentFrequency];
-                LinkedHashSet<CacheNode<Key, Value>> newNodes = frequencyList[nextFrequency];
-                moveToNextFrequency(currentNode, nextFrequency, currentNodes, newNodes);
-                cache.put((Key) k, currentNode);
-                if (lowestFrequency == currentFrequency && currentNodes.isEmpty()) {
-                    lowestFrequency = nextFrequency;
-                }
-            } else {
-                // Hybrid with LRU: put most recently accessed ahead of others:
-                LinkedHashSet<CacheNode<Key, Value>> nodes = frequencyList[currentFrequency];
-                nodes.remove(currentNode);
-                nodes.add(currentNode);
-            }
-            return currentNode.v;
-        } else {
+    public FrequencyNode getFrequencyNode(int frequency) {
+        if (!frequencyMap.containsKey(frequency - 1) &&
+                !frequencyMap.containsKey(frequency) &&
+                frequency != 1) {
+            System.out.println("Request for Frequency Node " + frequency +
+                    " But " + frequency + " or " + (frequency - 1) +
+                    " Doesn't exist");
             return null;
+
         }
+
+        if (!frequencyMap.containsKey(frequency)) {
+            FrequencyNode newFrequencyNode = new FrequencyNode(frequency);
+            if (frequency != 1)
+                freqList.insertAfter(frequencyMap.get(frequency - 1),
+                        newFrequencyNode);
+            else
+                freqList.prepend(newFrequencyNode);
+            frequencyMap.put(frequency, newFrequencyNode);
+        }
+
+        return frequencyMap.get(frequency);
     }
 
-    public Value remove(Object k) {
-        CacheNode<Key, Value> currentNode = cache.remove(k);
-        if (currentNode != null) {
-            LinkedHashSet<CacheNode<Key, Value>> nodes = frequencyList[currentNode.frequency];
-            nodes.remove(currentNode);
-            if (lowestFrequency == currentNode.frequency) {
-                findNextLowestFrequency();
-            }
-            return currentNode.v;
-        } else {
+    public void set(K key, V value) {
+        if (capacity == 0)
+            return;
+        FrequencyNode newFrequencyNode = null;
+        if (kvStore.containsKey(key)) {
+	    /* Remove old key if exists */
+            newFrequencyNode = getFrequencyNode(kvStore.get(key).frequencyNode.frequency + 1);
+            delete(kvStore.get(key));
+        } else if (size == capacity) {
+	    /* If cache size if full remove first element from freq list */
+            FrequencyNode fNode = (FrequencyNode) freqList.head;
+            LFUCacheEntry<K, V> entry = (LFUCacheEntry<K, V>) fNode.lfuCacheEntryList.head;
+            delete(entry);
+            System.out.println("Cache full. Removed entry " + entry);
+        }
+        if (newFrequencyNode == null)
+            newFrequencyNode = getFrequencyNode(1);
+        LFUCacheEntry<K, V> entry = new LFUCacheEntry<K, V>(key, value,
+                newFrequencyNode);
+        kvStore.put(key, entry);
+        newFrequencyNode.lfuCacheEntryList.append(entry);
+        size++;
+        System.out.println("Set new " + entry + " entry, cache size: " + size);
+    }
+
+
+    public V get(K key) {
+        if (!kvStore.containsKey(key) || capacity == 0)
             return null;
+
+        LFUCacheEntry<K, V> entry = kvStore.get(key);
+        FrequencyNode newFrequencyNode =
+                getFrequencyNode(entry.frequencyNode.frequency + 1);
+        entry.frequencyNode.lfuCacheEntryList.remove(entry);
+        newFrequencyNode.lfuCacheEntryList.append(entry);
+        if (entry.frequencyNode.lfuCacheEntryList.length <= 0) {
+            frequencyMap.remove(entry.frequencyNode.frequency);
+            freqList.remove(entry.frequencyNode);
+        }
+        entry.frequencyNode = newFrequencyNode;
+
+        return entry.value;
+    }
+
+    private class LFUCacheEntry<K, V> extends Node {
+        K key;
+        V value;
+        FrequencyNode frequencyNode;
+
+        public LFUCacheEntry(K key, V value,
+                             FrequencyNode frequencyNode) {
+            this.key = key;
+            this.value = value;
+            this.frequencyNode = frequencyNode;
+        }
+
+        public boolean equals(Object o) {
+            LFUCacheEntry<K, V> entry = (LFUCacheEntry<K, V>) o;
+            return key.equals(entry.key) &&
+                    value.equals(entry.value);
+        }
+
+        public int hashCode() {
+            return key.hashCode() * 31 + value.hashCode() * 17;
+        }
+
+        public String toString() {
+            return "[" + key.toString() + "," + value.toString() + ", " + frequencyNode.toString() + "]";
         }
     }
 
-    public int frequencyOf(Key k) {
-        CacheNode<Key, Value> node = cache.get(k);
-        if (node != null) {
-            return node.frequency + 1;
-        } else {
-            return 0;
-        }
+    private abstract class Node {
+        Node prev = null;
+        Node next = null;
     }
 
-    public void clear() {
-        for (int i = 0; i <= maxFrequency; i++) {
-            frequencyList[i].clear();
-        }
-        cache.clear();
-        lowestFrequency = 0;
-    }
+    private class FrequencyNode extends Node {
+        int frequency;
+        NodeList lfuCacheEntryList;
 
-    public Set<Key> keySet() {
-        return this.cache.keySet();
-    }
-
-    public Collection<Value> values() {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
-    }
-
-    public Set<Entry<Key, Value>> entrySet() {
-        return null;  //To change body of implemented methods use File | Settings | File Templates.
-    }
-
-    public int size() {
-        return cache.size();
-    }
-
-    public boolean isEmpty() {
-        return this.cache.isEmpty();
-    }
-
-    public boolean containsKey(Object o) {
-        return this.cache.containsKey(o);
-    }
-
-    public boolean containsValue(Object o) {
-        return false;  //To change body of implemented methods use File | Settings | File Templates.
-    }
-
-
-    private void initFrequencyList() {
-        for (int i = 0; i <= maxFrequency; i++) {
-            frequencyList[i] = new LinkedHashSet<CacheNode<Key, Value>>();
-        }
-    }
-
-    private void doEviction() {
-        int currentlyDeleted = 0;
-        float target = maxCacheSize * evictionFactor;
-        while (currentlyDeleted < target) {
-            LinkedHashSet<CacheNode<Key, Value>> nodes = frequencyList[lowestFrequency];
-            if (nodes.isEmpty()) {
-                throw new IllegalStateException("Lowest frequency constraint violated!");
-            } else {
-                Iterator<CacheNode<Key, Value>> it = nodes.iterator();
-                while (it.hasNext() && currentlyDeleted++ < target) {
-                    CacheNode<Key, Value> node = it.next();
-                    it.remove();
-                    cache.remove(node.k);
-                }
-                if (!it.hasNext()) {
-                    findNextLowestFrequency();
-                }
-            }
-        }
-    }
-
-    private void moveToNextFrequency(CacheNode<Key, Value> currentNode, int nextFrequency, LinkedHashSet<CacheNode<Key, Value>> currentNodes, LinkedHashSet<CacheNode<Key, Value>> newNodes) {
-        currentNodes.remove(currentNode);
-        newNodes.add(currentNode);
-        currentNode.frequency = nextFrequency;
-    }
-
-    private void findNextLowestFrequency() {
-        while (lowestFrequency <= maxFrequency && frequencyList[lowestFrequency].isEmpty()) {
-            lowestFrequency++;
-        }
-        if (lowestFrequency > maxFrequency) {
-            lowestFrequency = 0;
-        }
-    }
-
-    private static class CacheNode<Key, Value> {
-
-        public final Key k;
-        public Value v;
-        public int frequency;
-
-        public CacheNode(Key k, Value v, int frequency) {
-            this.k = k;
-            this.v = v;
+        public FrequencyNode(int frequency) {
             this.frequency = frequency;
+            lfuCacheEntryList = new NodeList();
+        }
+
+        public boolean equals(Object o) {
+            return frequency == ((FrequencyNode) o).frequency;
+        }
+
+        public int hashCode() {
+            return frequency * 31;
+        }
+
+        public String toString() {
+            return Integer.toString(frequency);
+        }
+    }
+
+    public class NodeList {
+        Node head;
+        Node tail;
+        int length;
+
+        public NodeList() {
+            head = null;
+            tail = null;
+            length = 0;
+        }
+
+        public void prepend(Node node) {
+            if (head == null) {
+                tail = node;
+                node.next = null;
+            } else {
+                node.next = head;
+                head.prev = node;
+            }
+            head = node;
+            node.prev = null;
+            length++;
+        }
+
+        public void append(Node node) {
+            if (tail == null) {
+                prepend(node);
+            } else {
+                tail.next = node;
+                node.next = null;
+                node.prev = tail;
+                tail = node;
+                length++;
+            }
+        }
+
+        public void insertAfter(Node position, Node node) {
+            if (position == tail) {
+                append(node);
+            } else {
+                node.next = position.next;
+                node.prev = position;
+                position.next = node;
+                node.next.prev = node;
+                length++;
+            }
+        }
+
+        public void remove(Node node) {
+            if (node == tail && node == head) { /* single node in LinkedList */
+                head = null;
+                tail = null;
+            } else if (node == tail) {
+                tail = tail.prev;
+                tail.next = null;
+            } else if (node == head) {
+                head = head.next;
+                head.prev = null;
+            } else {
+                node.next.prev = node.prev;
+                node.prev.next = node.next;
+            }
+            node.next = null;
+            node.prev = null;
+            length--;
+        }
+
+
+        public void printList() {
+            Node walk = head;
+            while (walk != null) {
+                System.out.print("[" + walk + "] -> ");
+                walk = walk.next;
+            }
+            System.out.println();
         }
 
     }

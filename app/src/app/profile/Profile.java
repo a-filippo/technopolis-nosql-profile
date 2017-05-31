@@ -5,6 +5,7 @@ public final class Profile {
     private int id = 0;
     private String firstname;
     private String lastname;
+    private int status = 0;
     private boolean deleted = false;
 
     Profile(int id, String firstname, String lastname){
@@ -28,6 +29,7 @@ public final class Profile {
         result = (result * id) % Integer.MAX_VALUE;
         result = (result * firstname.hashCode()) % Integer.MAX_VALUE;
         result = (result * lastname.hashCode()) % Integer.MAX_VALUE;
+        result = (result * status) % Integer.MAX_VALUE;
         if (deleted){
             result = (result * 7) % Integer.MAX_VALUE;
         }
@@ -41,9 +43,10 @@ public final class Profile {
         if (this.getClass() != profile.getClass()) return false;
         Profile otherProfile = (Profile) profile;
         boolean equal = true;
-        equal = equal && (this.firstname == otherProfile.firstname);
-        equal = equal && (this.lastname == otherProfile.lastname);
+        equal = equal && (this.firstname.equals(otherProfile.firstname));
+        equal = equal && (this.lastname.equals(otherProfile.lastname));
         equal = equal && (this.deleted == otherProfile.deleted);
+        equal = equal && (this.status == otherProfile.status);
         equal = equal && (this.id == otherProfile.id);
         return equal;
     }
@@ -54,6 +57,14 @@ public final class Profile {
 
     void setId(int id){
         this.id = id;
+    }
+
+    public int getStatus(){
+        return status;
+    }
+
+    public void setStatus(int status){
+        this.status = status;
     }
 
     public String getFirstname(){

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <script
+            src="https://code.jquery.com/jquery-3.2.1.min.js"
+            integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4="
+            crossorigin="anonymous"></script>
+    <title>Profile Service</title>
+    <style>
+        table{
+            border-collapse: collapse;
+        }
+        table td{
+            border: 1px solid #cecece;
+            padding: 3px;
+        }
+    </style>
+</head>
+<body>
+ {{{content}}}
+ <button class="update-status" type="button">Проявить активность</button>
+ <p class="update-status-text"></p>
+ <button class="get-status" type="button">Обновить статус</button>
+<script>
+    $(document).ready(function(){
+        $('.update-status').bind('click', function(){
+            $.ajax({
+                url: '/update-status',
+                type: 'get',
+                data: {user: $('.main-table').attr('data-id')},
+                dataType: 'json',
+                success: function(result){
+                    $('.update-status-text').html(result.text);
+                }
+            })
+        });
+
+        $('.get-status').bind('click', function(){
+            $.ajax({
+                url: '/get-status',
+                type: 'get',
+                data: {user: $('.main-table').attr('data-id')},
+                dataType: 'json',
+                success: function(result){
+                    $('.user-status').html('<b>' + result.status + '</b><br>' + result.text);
+                }
+            })
+        });
+    });
+</script>
+</body>
+</html>

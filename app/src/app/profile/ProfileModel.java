@@ -16,6 +16,7 @@ public class ProfileModel {
     private final String FIRSTNAME = "firstname";
     private final String LASTNAME = "lastname";
     private final String DELETED = "deleted";
+    private final String STATUS = "status";
 
     private MySQLModel model;
 
@@ -32,6 +33,7 @@ public class ProfileModel {
             String queryString = "select " +
                     USER_ID + ", " +
                     FIRSTNAME + ", " +
+                    STATUS + ", " +
                     LASTNAME + ", " +
                     DELETED + " from " +
                     TABLE_USER + " where " +
@@ -55,8 +57,10 @@ public class ProfileModel {
                 String firstname = rs.getString(FIRSTNAME);
                 String lastname = rs.getString(LASTNAME);
                 boolean deleted = rs.getBoolean(DELETED);
+                int status = rs.getInt(STATUS);
                 profile[0][i] = new Profile(id, firstname, lastname);
                 profile[0][i].setDeleted(deleted);
+                profile[0][i].setStatus(status);
                 i++;
             }
 
@@ -77,6 +81,7 @@ public class ProfileModel {
             String queryString = "select " +
                     FIRSTNAME + ", " +
                     LASTNAME + ", " +
+                    STATUS + ", " +
                     DELETED + " from " +
                     TABLE_USER + " where " +
                     USER_ID + " = ?";
@@ -87,8 +92,10 @@ public class ProfileModel {
                 String firstname = rs.getString(FIRSTNAME);
                 String lastname = rs.getString(LASTNAME);
                 boolean deleted = rs.getBoolean(DELETED);
+                int status = rs.getInt(STATUS);
                 profile[0] = new Profile(id, firstname, lastname);
                 profile[0].setDeleted(deleted);
+                profile[0].setStatus(status);
             } else {
                 profile[0] = null;
             }
@@ -105,6 +112,28 @@ public class ProfileModel {
         Profile profile = new Profile(0, firstname, lastname);
         return updateProfile(profile);
     }
+
+//    public int getStatus(int id){
+//        int[] status = new int[1];
+//        model.query((Connection con) -> {
+//            Statement stmt = con.createStatement();
+//            String queryString = "select " +
+//                    STATUS + " from " +
+//                    TABLE_USER + " where " +
+//                    USER_ID + " = ?";
+//            PreparedStatement query = con.prepareStatement(queryString);
+//            query.setInt(1, id);
+//            ResultSet rs = query.executeQuery();
+//            rs.next();
+//            status[0] = rs.getInt(STATUS);
+//
+//            con.close();
+//            stmt.close();
+//            rs.close();
+//            query.close();
+//        });
+//        return status[0];
+//    }
 
     public void removeProfile(int id){
         model.query((Connection con) -> {
@@ -127,20 +156,23 @@ public class ProfileModel {
                 queryString = "update " + TABLE_USER + " set " +
                         FIRSTNAME + " = ?, " +
                         LASTNAME + " = ?, " +
+                        STATUS + " = ?, " +
                         DELETED + " = ? where " +
                         USER_ID + " = ?";
             } else {
                 queryString = "insert into " + TABLE_USER + " set " +
                         FIRSTNAME + " = ?, " +
                         LASTNAME + " = ?, " +
+                        STATUS + " = ?, " +
                         DELETED + " = ?";
             }
             PreparedStatement insertQuery = con.prepareStatement(queryString, PreparedStatement.RETURN_GENERATED_KEYS);
             insertQuery.setString(1, profile.getFirstname());
             insertQuery.setString(2, profile.getLastname());
-            insertQuery.setBoolean(3, profile.getDeleted());
+            insertQuery.setInt(3, profile.getStatus());
+            insertQuery.setBoolean(4, profile.getDeleted());
             if (updating){
-                insertQuery.setInt(4, profile.getId());
+                insertQuery.setInt(5, profile.getId());
             }
             insertQuery.executeUpdate();
 

@@ -3,16 +3,25 @@ package app.profile;
 import app.cache.LFUCache;
 import app.mysql.MySQLModel;
 
-import java.util.*;
-
 public class ProfileService {
+    private static ProfileService profileService;
+
     MySQLModel mysqlModel;
     ProfileModel profileModel;
+    ProfileStatus profileStatus;
+
     LFUCache<Integer, Profile> cache;
     public ProfileService(MySQLModel mysqlModel){
         this.mysqlModel = mysqlModel;
         profileModel = new ProfileModel(mysqlModel);
-        cache = new LFUCache<>(3, (float)0.5);
+        profileStatus = new ProfileStatus();
+        cache = new LFUCache<>(3);
+
+        profileService = this;
+    }
+
+    public static ProfileService getService(){
+        return profileService;
     }
 
     public Profile[] getProfiles(int[] ids){
@@ -41,17 +50,52 @@ public class ProfileService {
         Profile profile = cache.get(id);
         if (profile == null){
             profile = profileModel.getProfile(id);
-            cache.put(id, profile);
+            cache.set(id, profile);
         }
+        System.out.println(cache.toString());
         return profile;
     }
 
     public void setStatusOnline(int id){
-
+        int timestamp = profileStatus.updateStatus(id);
+        Profile profile = cache.get(id);
+        if (profile != null){
+            profile.setStatus(timestamp);
+            cache.set(id, profile);
+        }
+        System.out.println(cache.toString());
     }
 
-    public boolean getUserStatus(int id){
-        return false;
+//    public boolean isOnline(int timestamp){
+//        return profileStatus.getStatus(timestamp);
+//    }
+//
+//    public String formatDate(int timestamp){
+//        return profileStatus.formatDate(timestamp);
+//    }
+
+    public int getUserStatus(int id){
+        int timestamp = profileStatus.getTimestamp(id);
+        if (timestamp == 0){
+            Profile profile = cache.get(id);
+            if (profile == null){
+                timestamp = profileModel.getProfile(id).getStatus();
+            } else {
+                timestamp = profile.getStatus();
+            }
+        }
+        System.out.println(cache.toString());
+        return timestamp;
+    }
+
+    public String formatStatus(int time){
+        String out;
+        if (profileStatus.getStatus(time)){
+            out = "Онлайн";
+        } else {
+            out = "Был в сети " + profileStatus.formatDate(time);
+        }
+        return out;
     }
 
     public Profile createProfile(String firstname, String lastname){
@@ -68,7 +112,8 @@ public class ProfileService {
 
     public void removeProfile(int id){
         profileModel.removeProfile(id);
-        cache.remove(id);
+        cache.delete(id);
+        System.out.println(cache.toString());
     }
 
     public void removeProfile(Profile profile){
@@ -77,6 +122,7 @@ public class ProfileService {
 
     public void updateProfile(Profile profile){
         profileModel.updateProfile(profile);
-        cache.remove(profile);
+        cache.delete(profile.getId());
+        System.out.println(cache.toString());
     }
 }
